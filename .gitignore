@@ -1,0 +1,41 @@
+# Node.js
+node_modules/
+.next/
+# Next.js build output
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# FastAPI / Uvicorn logs
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Docker
+*.tar
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Alembic migrations cache
+alembic/versions/*.pyc
+
+# PostgreSQL data volume (if mapped locally)
+pgdata/
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# MacOS metadata
+*.DS_Store
