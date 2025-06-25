@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 
 interface User {
   id: number;
@@ -41,27 +41,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   async function login(email: string, password: string) {
-    const data = await fetcher<{ access_token: string; user: User }>(
+    const response = await api.post<{ access_token: string; user: User }>(
       "/login",
-      {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      }
+      { email, password }
     );
-    setToken(data.access_token);
-    setUser(data.user);
+    setToken(response.data.access_token);
+    setUser(response.data.user);
   }
 
   async function register(email: string, name: string, password: string) {
-    const data = await fetcher<{ access_token: string; user: User }>(
+    const response = await api.post<{ access_token: string; user: User }>(
       "/register",
-      {
-        method: "POST",
-        body: JSON.stringify({ email, name, password }),
-      }
+      { email, name, password }
     );
-    setToken(data.access_token);
-    setUser(data.user);
+    setToken(response.data.access_token);
+    setUser(response.data.user);
   }
 
   function logout() {

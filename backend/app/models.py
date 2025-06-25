@@ -5,11 +5,13 @@ import enum
 from datetime import datetime, date
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     Date,
     DateTime,
     Enum as PgEnum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -24,6 +26,7 @@ class SessionType(str, enum.Enum):
     cardio = "cardio"
     running = "course_a_pied"
     other = "autre"
+    repos = "repos"
 
 
 class User(Base):
@@ -36,6 +39,8 @@ class User(Base):
     created_at: datetime = Column(DateTime, default=datetime.utcnow)
 
     plans = relationship("TrainingPlan", back_populates="owner", cascade="all, delete-orphan")
+
+    strava_token = relationship("StravaToken", back_populates="user", uselist=False)
 
 
 class TrainingPlan(Base):
@@ -52,6 +57,36 @@ class TrainingPlan(Base):
     sessions = relationship(
         "Session", back_populates="plan", cascade="all, delete-orphan", order_by="Session.date"
     )
+
+
+class StravaToken(Base):
+    __tablename__ = "strava_tokens"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    user_id: int = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    access_token: str = Column(String(255), nullable=False)
+    refresh_token: str = Column(String(255), nullable=False)
+    expires_at: int = Column(Integer, nullable=False)
+
+    user = relationship("User", back_populates="strava_token")
+
+
+class StravaActivity(Base):
+    __tablename__ = "strava_activities"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    strava_id: int = Column(BigInteger, unique=True, nullable=False, index=True)
+    user_id: int = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    name: str | None = Column(String(255))
+    type: str | None = Column(String(50))
+    start_date: str | None = Column(String(50))  # ISO date string
+    distance: float | None = Column(
+        Float
+    )  # mètres
+    moving_time: int | None = Column(Integer)  # secondes
+
+    user = relationship("User")
 
 
 class Session(Base):

@@ -62,6 +62,86 @@ def delete_plan(db: Session, plan: models.TrainingPlan) -> None:
     db.delete(plan)
     db.commit()
 
+
+def create_plan_from_gemini(db: Session, owner_id: int, plan_data: schemas.GeminiPlan) -> models.TrainingPlan:
+    """
+    Crée un plan d'entraînement complet et ses séances à partir d'une structure générée par Gemini.
+    """
+    db_plan = models.TrainingPlan(
+        name=plan_data.name,
+        goal=plan_data.goal,
+        owner_id=owner_id
+    )
+
+    for session_data in plan_data.sessions:
+        db_session = models.Session(
+            date=session_data.date,
+            type=session_data.type,
+            exercise=session_data.exercise,
+        )
+        db_plan.sessions.append(db_session)
+
+    db.add(db_plan)
+    db.commit()
+    db.refresh(db_plan)
+    return db_plan
+
+
+# ---------- Strava ----------
+
+def upsert_strava_token(
+    db: Session,
+    user_id: int,
+    access_token: str,
+    refresh_token: str,
+    expires_at: int,
+):
+    token = db.query(models.StravaToken).filter(models.StravaToken.user_id == user_id).first()
+    if token:
+        token.access_token = access_token
+        token.refresh_token = refresh_token
+        token.expires_at = expires_at
+    else:
+        token = models.StravaToken(
+            user_id=user_id,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+        )
+        db.add(token)
+    db.commit()
+    db.refresh(token)
+    return token
+
+
+def upsert_strava_activity(db: Session, user_id: int, activity_data: schemas.StravaActivityCreate) -> tuple[models.StravaActivity, bool]:
+    """
+    Crée ou met à jour une activité Strava dans la base de données.
+    Retourne l'objet de l'activité et un booléen `created`.
+    """
+    existing_activity = (
+        db.query(models.StravaActivity)
+        .filter(models.StravaActivity.strava_id == activity_data.strava_id)
+        .first()
+    )
+
+    if existing_activity:
+        # Update
+        update_data = activity_data.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(existing_activity, key, value)
+        db.commit()
+        db.refresh(existing_activity)
+        return existing_activity, False  # False for 'created'
+    else:
+        # Create
+        new_activity = models.StravaActivity(**activity_data.dict(), user_id=user_id)
+        db.add(new_activity)
+        db.commit()
+        db.refresh(new_activity)
+        return new_activity, True  # True for 'created'
+
+
 # ---------- Sessions ----------
 
 def add_session(

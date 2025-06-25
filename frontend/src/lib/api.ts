@@ -1,20 +1,21 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import axios, { AxiosRequestConfig } from 'axios';
 
-export async function fetcher<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-  const res = await fetch(`${API_BASE}${url}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    cache: "no-store",
-    ...init,
-  });
+export const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-  if (!res.ok) {
-    throw new Error(`Erreur ${res.status}`);
+api.interceptors.request.use((config: AxiosRequestConfig) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
+  return config;
+});
 
-  return (await res.json()) as T;
-}

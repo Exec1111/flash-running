@@ -1,12 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 
 export default function CreatePlanForm() {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [goal, setGoal] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,10 +14,7 @@ export default function CreatePlanForm() {
     setLoading(true);
     setError(null);
     try {
-      await fetcher("/plans", {
-        method: "POST",
-        body: JSON.stringify({ name, goal }),
-      });
+      await api.post("/plans/generate", { prompt });
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.message);
@@ -30,20 +26,14 @@ export default function CreatePlanForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto">
       <div>
-        <label className="block text-sm font-medium mb-1">Nom du plan</label>
-        <input
-          className="w-full rounded border p-2"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">Objectif</label>
+        <label htmlFor="prompt" className="block text-sm font-medium mb-1">Décrivez votre objectif</label>
         <textarea
-          className="w-full rounded border p-2"
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
+          id="prompt"
+          className="w-full rounded border p-2 min-h-[120px]"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Ex: Un plan pour courir mon premier marathon en 16 semaines, avec 3 séances par semaine."
+          required
         />
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}

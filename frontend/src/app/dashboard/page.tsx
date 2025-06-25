@@ -1,5 +1,7 @@
 "use client";
 import PlansList from "@/components/PlansList";
+import StravaConnectButton from "@/components/StravaConnectButton";
+import StravaSyncButton from "@/components/StravaSyncButton";
 import Link from "next/link";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -8,7 +10,11 @@ export default function Dashboard() {
   return (
     <ProtectedRoute>
       <section className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        <div className="flex gap-2">
+          <StravaConnectButton />
+          <StravaSyncButton />
+        </div>
         <Link
           href="/plans/new"
           className="bg-primary text-white rounded px-4 py-2 hover:opacity-90"

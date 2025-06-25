@@ -8,12 +8,15 @@ from .security import SECRET_KEY, ALGORITHM, create_access_token
 
 
 from .database import SessionLocal
-from . import schemas, crud, models
+from . import schemas, crud, models, strava_utils, gemini
+import json
 
 app = FastAPI(title="Training Plan API")
 
 # --- CORS ---
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+import httpx
 
 origins = [
     "http://localhost:3000",
@@ -99,6 +102,34 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
 
 # ---------- Plans ----------
 
+@app.post("/plans/generate", response_model=schemas.TrainingPlan, status_code=201)
+async def generate_plan(
+    request: schemas.PlanGenerateRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Génère un plan d'entraînement à partir d'un prompt en utilisant l'API Gemini.
+    """
+    raw_plan_json = gemini.generate_training_plan_from_prompt(request.prompt)
+    if not raw_plan_json:
+        raise HTTPException(status_code=500, detail="Failed to generate plan from Gemini.")
+
+    try:
+        plan_data_dict = json.loads(raw_plan_json)
+        gemini_plan = schemas.GeminiPlan(**plan_data_dict)
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"Error parsing Gemini response: {e}")
+        raise HTTPException(status_code=500, detail="Failed to parse the generated plan.")
+
+    try:
+        db_plan = crud.create_plan_from_gemini(db, owner_id=current_user.id, plan_data=gemini_plan)
+        return db_plan
+    except Exception as e:
+        print(f"Error saving generated plan to DB: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save the generated plan.")
+
+
 @app.post("/plans", response_model=schemas.TrainingPlan, status_code=201)
 async def create_plan(
     plan_in: schemas.TrainingPlanCreate,
@@ -169,3 +200,104 @@ async def list_sessions(
     if not plan or plan.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Plan not found")
     return crud.list_sessions(db, plan_id)
+
+
+# ---------- Strava ----------
+
+@app.get("/strava/connect", status_code=307)
+async def strava_connect(current_user: models.User = Depends(get_current_user)):
+    """Redirige l'utilisateur vers l'écran d'autorisation Strava."""
+    url = strava_utils.get_authorize_url(state=str(current_user.id))
+    return RedirectResponse(url)
+
+
+@app.get("/strava/connect-url", response_model=dict[str, str])
+async def strava_connect_url(current_user: models.User = Depends(get_current_user)):
+    """Retourne l'URL d'autorisation Strava (pour frontend fetch)."""
+    return {"url": strava_utils.get_authorize_url(state=str(current_user.id))}
+
+
+@app.get("/strava/callback")
+async def strava_callback(code: str, state: str | None = None, db: Session = Depends(get_db)):
+    """Callback OAuth Strava. Échange le *code* contre un token et le stocke."""
+    token_data = strava_utils.exchange_code(code)
+    user_id = int(state) if state else None
+    if not user_id:
+        raise HTTPException(status_code=400, detail="State manquant")
+    crud.upsert_strava_token(
+        db,
+        user_id=user_id,
+        access_token=token_data["access_token"],
+        refresh_token=token_data["refresh_token"],
+        expires_at=token_data["expires_at"],
+    )
+    # Redirige vers le dashboard frontend
+    return RedirectResponse("http://localhost:3000/dashboard")
+
+
+@app.post("/strava/sync", response_model=schemas.StravaSyncResult)
+async def strava_sync(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Synchronise les dernières activités Strava pour l'utilisateur courant."""
+    token = (
+        db.query(models.StravaToken)
+        .filter(models.StravaToken.user_id == current_user.id)
+        .first()
+    )
+    if not token:
+        raise HTTPException(status_code=400, detail="Compte Strava non lié.")
+
+    # 1. Rafraîchir le token si nécessaire
+    try:
+        new_token_data = strava_utils.refresh_access_token_if_needed(token)
+        # Si le token a été rafraîchi, les nouvelles données sont dans `new_token_data`
+        if new_token_data["access_token"] != token.access_token:
+            crud.upsert_strava_token(
+                db,
+                user_id=current_user.id,
+                access_token=new_token_data["access_token"],
+                refresh_token=new_token_data["refresh_token"],
+                expires_at=new_token_data["expires_at"],
+            )
+            access_token = new_token_data["access_token"]
+        else:
+            access_token = token.access_token
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Erreur de rafraîchissement du token Strava: {e.response.text}"
+        )
+
+    # 2. Récupérer les activités
+    try:
+        activities = strava_utils.fetch_activities(access_token, per_page=30)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Erreur de récupération des activités Strava: {e.response.text}"
+        )
+
+    if not activities:
+        return {"imported": 0, "updated": 0, "skipped": 0}
+
+    # 3. Enregistrer les activités en base
+    stats = {"imported": 0, "updated": 0, "skipped": 0}
+    for activity in activities:
+        activity_data = schemas.StravaActivityCreate(
+            strava_id=activity["id"],
+            name=activity.get("name"),
+            type=activity.get("type"),
+            start_date=activity.get("start_date_local"),
+            distance=activity.get("distance"),
+            moving_time=activity.get("moving_time"),
+        )
+        _, created = crud.upsert_strava_activity(
+            db, user_id=current_user.id, activity_data=activity_data
+        )
+        if created:
+            stats["imported"] += 1
+        else:
+            stats["updated"] += 1
+
+    return stats
+

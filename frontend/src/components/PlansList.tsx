@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 
 interface Session {
   id: number;
@@ -12,6 +12,7 @@ interface Session {
 export interface TrainingPlan {
   id: number;
   name: string;
+  goal: string;
   start_date: string;
   end_date: string;
   sessions: Session[];
@@ -23,10 +24,15 @@ export default function PlansList() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetcher<TrainingPlan[]>("/plans")
-      .then((data) => setPlans(data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    api.get<TrainingPlan[]>("/plans")
+      .then((res) => {
+        setPlans(res.data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
   }, []);
 
   if (loading) return <p>Chargement…</p>;
@@ -36,12 +42,12 @@ export default function PlansList() {
   return (
     <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {plans.map((plan) => (
-        <li
-          key={plan.id}
-          className="rounded border p-4 hover:shadow transition cursor-pointer"
-        >
-          <h3 className="font-semibold mb-2">{plan.name}</h3>
-        </li>
+        <Link href={`/plans/${plan.id}`} key={plan.id}>
+          <li className="mb-2 p-4 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+            <h3 className="text-xl font-semibold">{plan.name}</h3>
+            <p className="text-gray-600 dark:text-gray-400">{plan.goal}</p>
+          </li>
+        </Link>
       ))}
     </ul>
   );

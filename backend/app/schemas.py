@@ -12,6 +12,7 @@ class SessionType(str, Enum):
     cardio = "cardio"
     running = "course_a_pied"
     other = "autre"
+    repos = "repos"
 
 
 # ---------- Session ----------
@@ -72,3 +73,46 @@ class TrainingPlan(TrainingPlanBase):
 
     class Config:
         orm_mode = True
+
+
+# ---------- Gemini Generation ----------
+
+class PlanGenerateRequest(BaseModel):
+    prompt: str = Field(..., description="Le prompt de l'utilisateur pour générer le plan.")
+
+class GeminiSession(BaseModel):
+    date: dt_date
+    type: SessionType
+    exercise: str
+
+class GeminiPlan(BaseModel):
+    name: str
+    goal: str
+    sessions: list[GeminiSession]
+
+
+# ---------- Strava Activity ----------
+
+class StravaActivityBase(BaseModel):
+    strava_id: int
+    name: str | None
+    type: str | None
+    start_date: str | None
+    distance: float | None
+    moving_time: int | None
+
+class StravaActivityCreate(StravaActivityBase):
+    pass
+
+class StravaActivity(StravaActivityBase):
+    id: int
+    user_id: int
+
+    class Config:
+        orm_mode = True
+
+class StravaSyncResult(BaseModel):
+    imported: int
+    updated: int
+    skipped: int
+

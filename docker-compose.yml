@@ -19,8 +19,13 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/training
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
+      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI}
     depends_on:
       - db
     ports:
@@ -32,7 +37,11 @@ services:
     command: npm run dev
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:
@@ -40,3 +49,4 @@ services:
 
 volumes:
   db_data:
+  frontend_node_modules:
